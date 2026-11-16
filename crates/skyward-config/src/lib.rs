@@ -479,6 +479,11 @@ pub struct Service {
     /// directory takes only when they are described to it as well.
     #[serde(default)]
     pub registers: Vec<String>,
+    /// The file that describes what the program registers, where the phone
+    /// keeps that file apart from its other descriptions, as one its init
+    /// puts in place of another on some builds of the hardware.
+    #[serde(default)]
+    pub description: Option<String>,
     /// A service the program registers with the other directory, the one
     /// the phone's hardware services of the older kind use. It is written
     /// as the interface and then which of them it is.

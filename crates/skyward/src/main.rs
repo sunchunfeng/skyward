@@ -614,7 +614,7 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
     // own is.
     let mut told = registering.clone();
     told.extend(described.into_iter().filter(|name| !registering.contains(name)));
-    let files: Vec<String> = services.iter().filter_map(|s| s.description.clone()).collect();
+    let files: Vec<String> = services.iter().filter_map(|s| s.service.description.clone()).collect();
     if !told.is_empty() || !files.is_empty() {
         // A description the phone's build does not carry, as a service the
         // configuration lists for another build of it, leaves the directory

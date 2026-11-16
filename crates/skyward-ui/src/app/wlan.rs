@@ -51,6 +51,16 @@ pub(super) fn refused(l: Lang, security: Security, password: &str) -> Option<&'s
 }
 
 impl App {
+    /// The phone has a WLAN, and the recovery brings it up as it starts, as
+    /// the phone's own system does: the page shows the radio coming up
+    /// rather than a switch that is off, and how it goes comes back with
+    /// [`App::set_wlan`]. A WLAN that does not come up says why on its page
+    /// and in the kernel log, and the other pages are not held up by it.
+    pub fn start_wlan(&mut self) {
+        self.state.wlan = Some(Wlan { power: Power::Starting, ..Wlan::default() });
+        self.refresh();
+    }
+
     /// How the WLAN stands, as the runtime last told it.
     pub fn set_wlan(&mut self, w: Wlan) {
         if self.state.wlan.as_ref() == Some(&w) {
