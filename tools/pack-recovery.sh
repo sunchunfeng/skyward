@@ -3,6 +3,8 @@
 # 内核仍来自 --stock 指向的原厂 recovery，不会随代码变化。
 #
 # 用法：
+#   tools/pack-recovery.sh --label OS4.0.4
+#   tools/pack-recovery.sh --version OS4.0.4-latest-20261116170027
 #   tools/pack-recovery.sh --stock /path/to/recovery.img --label OS4.0.4
 #
 # 产物默认写到 target/images/skyward-<代号>-<标签>-<年月日时分秒>.img
@@ -11,9 +13,13 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 
+# 本机原厂 recovery 备份；可用环境变量 SKYWARD_STOCK_RECOVERY 覆盖。
+default_stock="${SKYWARD_STOCK_RECOVERY:-$HOME/install_software/Android/stock-recovery/dada-OS4.0.4/recovery.img}"
+
 stock=""
 config="devices/dada.toml"
 label=""
+version=""
 out_dir="target/images"
 
 while [ $# -gt 0 ]; do
@@ -21,6 +27,7 @@ while [ $# -gt 0 ]; do
         --stock) stock=${2:?--stock 需要原厂 recovery 镜像路径}; shift 2 ;;
         --config) config=${2:?--config 需要设备配置路径}; shift 2 ;;
         --label) label=${2:?--label 需要版本标签，例如 OS4.0.4}; shift 2 ;;
+        --version) version=${2:?--version 需要 Recovery 打包版本，例如 OS4.0.4-latest-20261116170027}; shift 2 ;;
         --out-dir) out_dir=${2:?--out-dir 需要输出目录}; shift 2 ;;
         -h|--help)
             sed -n '2,8p' "$0"
@@ -30,10 +37,18 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+if [ -z "$stock" ] && [ -f "$default_stock" ]; then
+    stock=$default_stock
+fi
 if [ -z "$stock" ] || [ ! -f "$stock" ]; then
-    echo "请用 --stock 指向原厂 recovery 分区镜像，例如：" >&2
-    echo "  tools/pack-recovery.sh --stock ~/Downloads/dada-4.0.4/out/recovery.img --label OS4.0.4" >&2
+    echo "请用 --stock 指向原厂 recovery 分区镜像，或把备份放到：" >&2
+    echo "  $default_stock" >&2
+    echo "示例：" >&2
+    echo "  tools/pack-recovery.sh --label OS4.0.4" >&2
     exit 2
+fi
+if [ "$stock" = "$default_stock" ]; then
+    echo "使用原厂 recovery 备份：$stock"
 fi
 if [ ! -f "$config" ]; then
     echo "找不到设备配置：$config" >&2
@@ -104,6 +119,19 @@ if [ -n "$label" ]; then
     name="${name}-${label}"
 fi
 out="$out_dir/${name}-${stamp}.img"
+if [ -n "$version" ]; then
+    pack_version=$version
+elif [ -n "$label" ]; then
+    pack_version="${label}-${stamp}"
+else
+    pack_version=$stamp
+fi
+
+official=$(sed -n '/\[workspace.package\]/,/\[/p' Cargo.toml | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+if [ -z "$official" ]; then
+    echo "读不到 workspace 的 version（Cargo.toml [workspace.package]）" >&2
+    exit 2
+fi
 
 echo "打包 $out"
 "$target_dir/release/skyward-pack" recovery \
@@ -111,12 +139,17 @@ echo "打包 $out"
     --binary "$target_dir/aarch64-linux-android/release/skyward" \
     --system-init target/system-init/aarch64-linux-android/release/system-init \
     --bash "$bash_bin" \
-    "${omapi_args[@]}" \
+    ${omapi_args[@]+"${omapi_args[@]}"} \
     --config "$config" \
     --font resources/fonts/MiSansVF.ttf \
     --mono resources/fonts/KirkMono-Regular.ttf \
     --mono-license resources/fonts/KirkMono-OFL.txt \
+    --pack-version "$pack_version" \
     --out "$out"
 
 shasum -a 256 "$out"
+{
+    echo "Recovery 打包版本: $pack_version"
+    echo "Skyward 官方版本: v$official"
+} | tee "${out%.img}.version.txt"
 echo "完成：$out"

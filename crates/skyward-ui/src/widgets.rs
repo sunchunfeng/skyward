@@ -2269,6 +2269,14 @@ pub fn author_line(t: &Theme, f: &Fonts, text: &str) -> Sprite {
     hero_line(t, f, text, t.m.dp(AUTHOR_BELOW_DP))
 }
 
+/// How far below the version the pack label stands on the About hero.
+const PACK_BELOW_DP: f32 = AUTHOR_BELOW_DP * 2.0;
+
+/// This recovery image's pack label, under the author line on About.
+pub fn pack_line(t: &Theme, f: &Fonts, text: &str) -> Sprite {
+    hero_line(t, f, text, t.m.dp(PACK_BELOW_DP))
+}
+
 /// A line centred under the About wordmark in the version's type, `below`
 /// the version's place.
 fn hero_line(t: &Theme, f: &Fonts, text: &str, below: f32) -> Sprite {

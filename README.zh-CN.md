@@ -187,14 +187,14 @@ target/release/skyward-pack recovery \
 改动代码后，用 `tools/pack-recovery.sh` 重新编译并打出镜像。镜像文件名带上生成时间（年月日时分秒），每次打包都不会覆盖之前的文件：
 
 ```sh
-tools/pack-recovery.sh \
-  --stock /path/to/recovery.img \
-  --label OS4.0.4
+tools/pack-recovery.sh --label OS4.0.4
 ```
+
+若本机已有备份（见下），可省略 `--stock`。
 
 参数说明：
 
-- `--stock`：原厂 recovery 分区镜像，必填。内核和系统库取自它，代码改动不影响内核。
+- `--stock`：原厂 recovery 分区镜像。省略时使用 `~/install_software/Android/stock-recovery/dada-OS4.0.4/recovery.img`（可用环境变量 `SKYWARD_STOCK_RECOVERY` 覆盖）。内核和系统库取自它，代码改动不影响内核。
 - `--label`：版本标签，写进文件名，可选。
 - `--config`：设备配置，默认 `devices/dada.toml`。
 - `--out-dir`：输出目录，默认 `target/images`。
@@ -207,6 +207,8 @@ tools/pack-recovery.sh \
 - `cargo-ndk`，用 `cargo install cargo-ndk` 安装。
 - 静态 Bash：`tools/bash/out/bash`，由 `tools/bash/build.sh` 生成，需要 `aarch64-linux-gnu-gcc`。它不随 Rust 代码变化，只需生成一次。
 - 设备配置中启用了 OMAPI bridge 时，还需要 `tools/omapi-bridge/out/omapi-bridge`。`tools/omapi-bridge/build.sh` 中的编译器路径是 Linux 的，在 macOS 上要改成 `darwin-x86_64`。
+
+原厂 recovery 建议备份到 `~/install_software/Android/stock-recovery/<版本>/recovery.img`；系统大版本升级后从新卡刷包用 payload-dumper 重新提取。
 
 测试和代码检查在电脑上运行；只在手机上运行的代码按照手机目标检查：
 

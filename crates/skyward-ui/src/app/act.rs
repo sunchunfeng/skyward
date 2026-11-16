@@ -426,6 +426,9 @@ impl App {
                     Security::Enterprise => {
                         self.say(l.pick(["暂不支持需要账号登录的网络", "尚不支援需要帳號登入的網路", "Networks that need an account sign-in aren't supported"]), now)
                     }
+                    s if s.password() && self.state.known_wlan.as_ref() == Some(&network.ssid) => {
+                        return vec![Effect::JoinKnown { ssid: network.ssid, name: network.name, security: network.security }]
+                    }
                     s if s.password() => self.ask_password(network),
                     _ => {
                         return vec![Effect::JoinWlan {

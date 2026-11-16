@@ -93,6 +93,9 @@ enum Cmd {
         /// Required when the device config starts the Thales OMAPI bridge.
         #[arg(long)]
         omapi: Option<PathBuf>,
+        /// Label for this recovery image (first line of skyward/pack-version.txt).
+        #[arg(long)]
+        pack_version: Option<String>,
         #[arg(long)]
         out: PathBuf,
     },
@@ -154,7 +157,7 @@ fn main() -> Result<()> {
             img.kernel = BootImage::read(&kernel)?.kernel;
             write(&out, &img, &img.to_bytes()?)
         }
-        Cmd::Recovery { stock, update_skyward, binary, system_init, bash, config, font, mono, mono_license, firmware, modules, omapi, out } => {
+        Cmd::Recovery { stock, update_skyward, binary, system_init, bash, config, font, mono, mono_license, firmware, modules, omapi, pack_version, out } => {
             let size = partition_size(&stock)?;
             let mut img = BootImage::read(&stock)?;
             let mut rd = Ramdisk::decode(&img.ramdisk)?;
@@ -198,6 +201,10 @@ fn main() -> Result<()> {
             put(&mut rd, paths::FONT, 0o644, read(&font)?, update_skyward)?;
             put(&mut rd, paths::MONO, 0o644, read(&mono)?, update_skyward)?;
             put(&mut rd, paths::MONO_LICENSE, 0o644, read(&mono_license)?, update_skyward)?;
+            if let Some(label) = pack_version {
+                let file = format!("{label}\nv{}\n", env!("CARGO_PKG_VERSION"));
+                put(&mut rd, paths::PACK_VERSION, 0o644, file.into_bytes(), update_skyward)?;
+            }
             for file in firmware {
                 let (name, from) = file.split_once('=').with_context(|| "--firmware takes name=local-file")?;
                 ensure!(!name.is_empty() && !name.starts_with('/') && !name.contains(".."), "{name} is not a firmware name");

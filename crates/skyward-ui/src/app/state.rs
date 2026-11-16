@@ -182,6 +182,9 @@ pub struct State {
     /// The WLAN, as the runtime last told it; none on a phone whose WLAN the
     /// recovery does not bring up.
     pub wlan: Option<Wlan>,
+    /// The SSID whose password a previous start kept. Joining it asks for
+    /// no password.
+    pub known_wlan: Option<Vec<u8>>,
     /// The network the password page is for, and what is typed there.
     pub joining: Option<Network>,
     /// The network the details page is of, as it was found.
@@ -239,7 +242,7 @@ impl Default for State {
             recovery_partitions: false,
             keep_recovery: true,
             disable_avb: false,
-            remember_password: false,
+            remember_password: true,
             remembered: None,
             reflash: None,
             mounts: Ok(Vec::new()),
@@ -291,6 +294,7 @@ impl Default for State {
             part_work: None,
             update: Standing::None,
             wlan: None,
+            known_wlan: None,
             joining: None,
             details: None,
             adding: None,

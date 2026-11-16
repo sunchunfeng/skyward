@@ -1578,7 +1578,12 @@ pub fn run(cfg: &DeviceConfig, programs: &[Service], font: &Path, mono: &Path, r
                     let _ = skyward_sys::kmsg(&format!("the vendor interface's libraries are not open: {e:#}"));
                     None
                 });
-                wlan::Worker::start(w.clone(), modules, libraries, servers.clone())
+                let saved = crate::remembered::load_network();
+                if let Some(network) = &saved {
+                    app.remember_wlan(network.ssid.clone());
+                    skyward_sys::kmsg(&format!("a WLAN password is kept for {}", network.name))?;
+                }
+                wlan::Worker::start(w.clone(), modules, libraries, servers.clone(), saved)
             })();
             match started {
                 Ok(worker) => {
@@ -1598,6 +1603,11 @@ pub fn run(cfg: &DeviceConfig, programs: &[Service], font: &Path, mono: &Path, r
         None => None,
     };
     let mut scanned_at = Instant::now();
+    // The WLAN password kept from an earlier start, and one just accepted
+    // that is still to be written. Joining the kept network uses the copy
+    // here, which is updated when a new one is accepted.
+    let mut kept_network = crate::remembered::load_network();
+    let mut pending_wlan: Option<crate::remembered::KeptNetwork> = None;
     app.state.update_server = cfg.update.is_some();
     // Asking the update server, and downloading the full package.
     let mut checker: Option<updates::Worker> = None;
@@ -2219,12 +2229,17 @@ pub fn run(cfg: &DeviceConfig, programs: &[Service], font: &Path, mono: &Path, r
                 }
             }
         }
-        if let Some((told, traffic)) = wlan.as_ref().map(wlan::Worker::told) {
+        if let Some((told, traffic, keep)) = wlan.as_ref().map(wlan::Worker::told) {
             if let Some(w) = told {
                 app.set_wlan(w);
             }
             if let Some(t) = traffic {
                 app.set_traffic(t);
+            }
+            if let Some(network) = keep {
+                app.remember_wlan(network.ssid.clone());
+                kept_network = Some(network.clone());
+                pending_wlan = Some(network);
             }
         }
         // The WLAN page scans again now and then while it shows, as the
@@ -2246,6 +2261,12 @@ pub fn run(cfg: &DeviceConfig, programs: &[Service], font: &Path, mono: &Path, r
             || part_worker.is_some()
             || systems_worker.as_ref().is_some_and(systems::Worker::busy);
         if !metadata_busy {
+            if let Some(network) = pending_wlan.take() {
+                match crate::remembered::save_network(&network) {
+                    Ok(()) => skyward_sys::kmsg(&format!("the WLAN password is kept for {}", network.name))?,
+                    Err(e) => skyward_sys::kmsg(&format!("the WLAN password was not kept: {e:#}"))?,
+                }
+            }
             if let Some(due) = keeper.due(app.settings(), now) {
                 match settings::write(&due) {
                     Ok(()) => {
@@ -2877,6 +2898,14 @@ pub fn run(cfg: &DeviceConfig, programs: &[Service], font: &Path, mono: &Path, r
                     }
                     Effect::JoinWlan { ssid, name, security, password } => {
                         wlan_worker(&wlan)?.send(wlan::Command::Join { ssid, name, security, password: password.0 })
+                    }
+                    Effect::JoinKnown { ssid, name, security } => {
+                        let Some(saved) = kept_network.as_ref().filter(|network| network.ssid == ssid) else {
+                            skyward_sys::kmsg("no WLAN password is kept for that network")?;
+                            continue;
+                        };
+                        let password = saved.password.clone();
+                        wlan_worker(&wlan)?.send(wlan::Command::Join { ssid, name, security, password })
                     }
                     Effect::LeaveWlan => wlan_worker(&wlan)?.send(wlan::Command::Leave),
                     // What the installed system is called is the page's to

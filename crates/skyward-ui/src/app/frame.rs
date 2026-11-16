@@ -186,6 +186,8 @@ pub struct HeroArt {
     pub wordmark: Sprite,
     pub version: Sprite,
     pub author: Sprite,
+    /// Recovery pack label when the image carries `skyward/pack-version.txt`.
+    pub pack: Option<Sprite>,
     pub runs: Vec<Vec<Run>>,
 }
 

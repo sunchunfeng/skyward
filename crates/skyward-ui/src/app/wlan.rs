@@ -92,6 +92,11 @@ impl App {
         Some(WlanMark { level: fmt::signal_level(link.signal), receiving: t.rx > 0, sending: t.tx > 0, speed, unit })
     }
 
+    /// `ssid` is one whose password a previous start kept.
+    pub fn remember_wlan(&mut self, ssid: Vec<u8>) {
+        self.state.known_wlan = Some(ssid);
+    }
+
     /// Open the password page for `network`, empty.
     pub(super) fn ask_password(&mut self, network: Network) {
         self.state.joining = Some(network);
@@ -152,6 +157,20 @@ mod tests {
         assert_eq!(app.screen(), Screen::Wlan);
         assert_eq!(tap(&mut app, &f, &i, Action::Toggle(Switch::Wlan)), vec![Effect::Wlan(false)]);
         assert_eq!(app.state.wlan, Some(Wlan::default()));
+    }
+
+    #[test]
+    fn a_network_whose_password_is_kept_is_joined_without_asking_for_it() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Home, W, H, PPD);
+        app.state.wlan = Some(Wlan { power: Power::On, networks: vec![network("Skyward", -40, Security::Psk), network("Other", -50, Security::Psk)], joined: None });
+        app.remember_wlan(b"Skyward".to_vec());
+        app.act(Action::Open(Screen::Wlan), 0);
+        let join = Effect::JoinKnown { ssid: b"Skyward".to_vec(), name: "Skyward".into(), security: Security::Psk };
+        assert_eq!(tap(&mut app, &f, &i, Action::JoinNetwork(0)), vec![join]);
+        assert_eq!(app.screen(), Screen::Wlan, "the password page does not open");
+        tap(&mut app, &f, &i, Action::JoinNetwork(1));
+        assert_eq!(app.screen(), Screen::WlanPassword, "a network whose password is not kept still asks");
     }
 
     #[test]

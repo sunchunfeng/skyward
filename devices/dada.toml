@@ -156,17 +156,6 @@ ready_service = "android.hardware.weaver.IWeaver/default"
 user = "vendor_thales_weaver"
 groups = ["vendor_thales_weaver", "system", "drmrpc"]
 
-# Package the bridge with skyward-pack --omapi; it selects only the running
-# stock Thales executable with UID 2916 and follows its lifetime.
-[[service]]
-path = "/skyward/omapi-bridge"
-args = ["--weaver"]
-libraries = ["/system/lib64"]
-ready_service = "android.se.omapi.ISecureElementService/default"
-description = "/skyward/omapi.xml"
-user = "root"
-groups = ["root"]
-
 [firmware]
 partition = "modem"
 

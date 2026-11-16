@@ -336,13 +336,13 @@ mod tests {
     }
 
     #[test]
-    fn the_avb_and_remember_switches_are_kept_and_start_off() {
-        // Both change something the owner should have chosen: one the
-        // signatures the bootloader checks, the other a password written
-        // to /metadata. A phone flashed and never visited is neither.
+    fn the_avb_and_remember_switches_are_kept_and_remember_password_starts_on() {
+        // Turning AVB checks off still starts off until the owner chooses it.
+        // Remembering the decrypt password starts on so a successful decrypt
+        // is kept for the next recovery visit without another visit to Settings.
         let fresh = State::default();
         assert!(!fresh.disable_avb, "a ROM is installed without turning the checks off");
-        assert!(!fresh.remember_password, "no password is kept unless asked for");
+        assert!(fresh.remember_password, "decrypt passwords are kept once they open the data partition");
         assert!(fresh.remembered.is_none());
 
         // A value the pages set comes back at the next start.

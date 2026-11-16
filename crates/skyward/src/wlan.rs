@@ -58,6 +58,31 @@ const TRAFFIC: Duration = Duration::from_secs(1);
 /// How long after the network gave no address it is asked again.
 const RETRY: Duration = Duration::from_secs(10);
 
+/// The protections a kept WLAN can name, which are the ones the recovery
+/// joins with a password or with none.
+fn kept_security(security: Security) -> Option<crate::remembered::KeptSecurity> {
+    use crate::remembered::KeptSecurity;
+    Some(match security {
+        Security::Open => KeptSecurity::Open,
+        Security::Owe => KeptSecurity::Owe,
+        Security::Psk => KeptSecurity::Psk,
+        Security::Sae => KeptSecurity::Sae,
+        Security::PskSae => KeptSecurity::PskSae,
+        Security::Wep | Security::Enterprise => return None,
+    })
+}
+
+fn joined_security(security: crate::remembered::KeptSecurity) -> Security {
+    use crate::remembered::KeptSecurity;
+    match security {
+        KeptSecurity::Open => Security::Open,
+        KeptSecurity::Owe => Security::Owe,
+        KeptSecurity::Psk => Security::Psk,
+        KeptSecurity::Sae => Security::Sae,
+        KeptSecurity::PskSae => Security::PskSae,
+    }
+}
+
 /// What the screen asks of the WLAN.
 pub enum Command {
     On,
@@ -87,6 +112,9 @@ enum Asked {
 enum Report {
     Wlan(Wlan),
     Traffic(Traffic),
+    /// The network just accepted the password. The screen writes it down
+    /// once nothing else is using /metadata.
+    Keep(crate::remembered::KeptNetwork),
 }
 
 pub struct Worker {
@@ -102,11 +130,11 @@ impl Worker {
     /// driver's modules are found in, `libraries` the bundle of the vendor
     /// interface's libraries, and `servers` where the DNS servers the
     /// network gives are kept for whoever looks names up.
-    pub fn start(cfg: Config, modules: Vec<PathBuf>, libraries: Option<PathBuf>, servers: Servers) -> Result<Worker> {
+    pub fn start(cfg: Config, modules: Vec<PathBuf>, libraries: Option<PathBuf>, servers: Servers, saved: Option<crate::remembered::KeptNetwork>) -> Result<Worker> {
         let (inbox, asked) = worker::telling().context("make the WLAN thread's inbox")?;
         let back = inbox.clone();
         let worker = worker::Worker::start("wlan", move |tell| {
-            let mut s = Station { cfg, modules, libraries, servers, state: Wlan::default(), running: None, back, tell };
+            let mut s = Station { cfg, modules, libraries, servers, state: Wlan::default(), running: None, back, tell, saved, quiet: false, resumed: false, offered: None };
             s.run(&asked);
         })?;
         Ok(Worker { inbox, worker })
@@ -123,15 +151,16 @@ impl Worker {
 
     /// How the WLAN stands now, and how fast data went over it in the last
     /// second, each if told since the last call.
-    pub fn told(&self) -> (Option<Wlan>, Option<Traffic>) {
-        let (mut wlan, mut traffic) = (None, None);
+    pub fn told(&self) -> (Option<Wlan>, Option<Traffic>, Option<crate::remembered::KeptNetwork>) {
+        let (mut wlan, mut traffic, mut keep) = (None, None, None);
         for report in self.worker.events() {
             match report {
                 Report::Wlan(w) => wlan = Some(w),
                 Report::Traffic(t) => traffic = Some(t),
+                Report::Keep(network) => keep = Some(network),
             }
         }
-        (wlan, traffic)
+        (wlan, traffic, keep)
     }
 }
 
@@ -204,6 +233,17 @@ struct Station {
     /// network reaches, answers to: the thread's own inbox.
     back: Teller<Inbox>,
     tell: Teller<Report>,
+    /// The network a previous start joined, offered again once the radio
+    /// is up and a scan has found something.
+    saved: Option<crate::remembered::KeptNetwork>,
+    /// The user left the network or chose one, so the kept one is not
+    /// offered again until the radio starts over.
+    quiet: bool,
+    /// The kept network was already given to the supplicant this time the
+    /// radio is on.
+    resumed: bool,
+    /// The join under way, written down once the access point accepts it.
+    offered: Option<crate::remembered::KeptNetwork>,
 }
 
 impl Station {
@@ -259,15 +299,22 @@ impl Station {
             }
             Command::Join { ssid, name, security, password } => {
                 self.unaddress();
+                // A network the user chose is not replaced by the one kept
+                // from an earlier start.
+                self.quiet = true;
+                self.offered = kept_security(security).map(|kept| crate::remembered::KeptNetwork { ssid: ssid.clone(), name: name.clone(), security: kept, password: password.clone() });
                 let mut joined = Joined { ssid, name, security, stage: Stage::Joining };
                 if let Err(e) = self.join(&joined, &password) {
                     let _ = skyward_sys::kmsg(&format!("joining {} failed: {e:#}", joined.name));
                     joined.stage = Stage::Failed;
+                    self.offered = None;
                 }
                 self.state.joined = Some(joined);
             }
             Command::Leave => {
                 self.unaddress();
+                self.quiet = true;
+                self.offered = None;
                 if let Some(r) = &self.running
                     && let Err(e) = r.control.order("REMOVE_NETWORK all")
                 {
@@ -341,6 +388,10 @@ impl Station {
             let _ = skyward_sys::kmsg(&format!("{e:#}"));
         }
         self.state = Wlan::default();
+        // The radio starting again offers the kept network once more.
+        self.quiet = false;
+        self.resumed = false;
+        self.offered = None;
     }
 
     /// The supplicant no longer answers: the WLAN is off, and why is said.
@@ -397,14 +448,44 @@ impl Station {
         }
         self.state.networks = wlan::networks(&found);
         r.found = found;
+        drop(r);
+        self.resume_saved();
         Ok(())
+    }
+
+    /// Join the network kept from an earlier start, once a scan has found
+    /// any access point. The supplicant keeps looking when this one is not
+    /// among them, as it does for a network added by hand.
+    fn resume_saved(&mut self) {
+        if self.quiet || self.resumed || self.state.joined.is_some() {
+            return;
+        }
+        let Some(saved) = self.saved.clone() else { return };
+        let Some(r) = &self.running else { return };
+        if r.found.is_empty() {
+            return;
+        }
+        self.resumed = true;
+        self.offered = Some(saved.clone());
+        let mut joined = Joined { ssid: saved.ssid, name: saved.name, security: joined_security(saved.security), stage: Stage::Joining };
+        if let Err(e) = self.join(&joined, &saved.password) {
+            let _ = skyward_sys::kmsg(&format!("joining the kept WLAN {} failed: {e:#}", joined.name));
+            joined.stage = Stage::Failed;
+            self.offered = None;
+        }
+        self.state.joined = Some(joined);
     }
 
     fn joining(&mut self, told: &Told) {
         let Some(j) = &mut self.state.joined else { return };
         match j.on(told) {
             Next::Show => {}
-            Next::Address => self.ask_address(),
+            Next::Address => {
+                if let Some(network) = self.offered.clone() {
+                    self.tell.tell(Report::Keep(network));
+                }
+                self.ask_address();
+            }
             Next::Unaddress => self.unaddress(),
             Next::Forget => {
                 if let Some(r) = &self.running

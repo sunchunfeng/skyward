@@ -455,6 +455,15 @@ pub fn settings(cx: &Ctx) -> Frame {
         ]);
         y = widgets::footnote(&mut c, t, f, rows.bottom, note);
     }
+    if s.offers(Screen::Wlan) {
+        let wlan = widgets::section(&mut c, t, f, y, l.pick(WLAN));
+        let note = l.pick([
+            "成功连接过的 WLAN 密码会加密保存在 /metadata，下次进入 recovery 会自动尝试重新连接，无需再次输入。",
+            "成功連線過的 WLAN 密碼會加密儲存在 /metadata，下次進入 recovery 會自動嘗試重新連線，無需再次輸入。",
+            "After you join a network, its password is kept encrypted under /metadata and the recovery joins it again at the next start without asking.",
+        ]);
+        y = widgets::footnote(&mut c, t, f, wlan, note);
+    }
     y = widgets::section(&mut c, t, f, y, l.pick(["调试", "偵錯", "Debugging"]));
     let debug = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(TERMINAL)).icon(SLATE, Icon::Terminal)]);
     out.extend(hits(&debug.rows, &[Action::Open(Screen::Terminal)]));
@@ -598,10 +607,12 @@ pub fn about(cx: &Ctx) -> Frame {
     let mut c = Canvas::new(m.w, fitted(t, bottom));
     let (out, summary_top, bottom) = about_cards(cx, &mut c);
     let canvas = fit(c, t, bottom);
+    let pack = cx.info.pack_version.as_deref().map(|p| widgets::pack_line(t, f, p));
     let art = HeroArt {
         wordmark: widgets::wordmark(t, f, "Skyward", m.dp(233.7), m.dp(37.8)),
         version: widgets::version_line(t, f, VERSION),
         author: widgets::author_line(t, f, AUTHOR),
+        pack,
         runs: canvas.runs(),
     };
     Frame { header: false, hero: Some(art), ..Frame::new(t, canvas, out, cx.state.lang.pick(ABOUT), summary_top) }
@@ -698,10 +709,14 @@ pub fn specs(cx: &Ctx) -> Frame {
     if let Some(r) = &i.android {
         y = widgets::info_card(&mut c, t, f, y + gap, &[(l.pick(ANDROID_VERSION), fmt::android(l, r, i.security_patch.as_ref()))]);
     }
-    let mut recovery = vec![
-        (l.pick(["Recovery 版本", "Recovery 版本", "Recovery version"]), format!("Skyward {VERSION}")),
-        (l.pick(["内核版本", "核心版本", "Kernel version"]), i.kernel.clone()),
-    ];
+    let mut recovery = Vec::new();
+    if let Some(p) = &i.pack_version {
+        recovery.push((l.pick(["Recovery 版本", "Recovery 版本", "Recovery version"]), p.clone()));
+        recovery.push((l.pick(["Skyward 版本", "Skyward 版本", "Skyward version"]), format!("v{VERSION}")));
+    } else {
+        recovery.push((l.pick(["Recovery 版本", "Recovery 版本", "Recovery version"]), format!("Skyward v{VERSION}")));
+    }
+    recovery.push((l.pick(["内核版本", "核心版本", "Kernel version"]), i.kernel.clone()));
     if let Some(builder) = BUILDER.filter(|name| !name.is_empty()) {
         recovery.push((l.pick(["构建者", "建置者", "Built by"]), builder.to_string()));
     }
@@ -4043,6 +4058,19 @@ pub fn systems(cx: &Ctx) -> Frame {
             y = track.y + track.h;
         }
     }
+    y = widgets::section(&mut c, t, f, y, l.pick(REBOOT));
+    let reboot = widgets::list(
+        &mut c,
+        t,
+        f,
+        y,
+        &[
+            Row::new(l.pick(["重启到系统", "重新啟動到系統", "Reboot to system"])).icon(ORANGE, Icon::Power),
+            Row::new(l.pick(["重启到恢复模式", "重新啟動到復原模式", "Reboot to recovery"])).icon(ORANGE, Icon::Power),
+        ],
+    );
+    out.extend(hits(&reboot.rows, &[Action::RebootTo(Target::System), Action::RebootTo(Target::Recovery)]));
+    y = reboot.bottom;
     Frame::new(t, fit(c, t, y), out, title, top)
 }
 
@@ -4087,8 +4115,9 @@ pub fn fastboot(cx: &Ctx) -> Frame {
 
 /// Where to go once what the system asked for has stopped or cannot be
 /// done, in the order the pages list them.
-const AFTERWARDS: [(Text, Action); 3] = [
+const AFTERWARDS: [(Text, Action); 4] = [
     (["重启到系统", "重新啟動到系統", "Reboot to system"], Action::RebootTo(Target::System)),
+    (["重启到恢复模式", "重新啟動到復原模式", "Reboot to recovery"], Action::RebootTo(Target::Recovery)),
     (["进入恢复模式", "進入復原模式", "Enter recovery"], Action::Dismiss),
     (["关机", "關機", "Power off"], Action::RebootTo(Target::PowerOff)),
 ];

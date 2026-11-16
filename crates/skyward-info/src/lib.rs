@@ -52,6 +52,8 @@ pub struct DeviceInfo {
     pub slot: Option<Slot>,
     pub snapshot: SnapshotState,
     pub boot: Boot,
+    /// This recovery image's pack label from `skyward/pack-version.txt`.
+    pub pack_version: Option<String>,
 }
 
 /// `ro.build.version.security_patch`, a calendar date.
@@ -176,7 +178,16 @@ pub fn collect_with(cfg: &DeviceConfig, battery: Option<Battery>) -> Result<Devi
         slot: skyward_vab::current_slot()?,
         snapshot: skyward_vab::snapshot_state()?,
         boot: Boot { unlocked, verified: skyward_block::boot_param("androidboot.verifiedbootstate")? },
+        pack_version: pack_version(),
     })
+}
+
+/// The pack label written when this recovery image was built.
+fn pack_version() -> Option<String> {
+    let path = Path::new(skyward_config::ramdisk::PACK_VERSION);
+    let text = fs::read_to_string(path).ok()?;
+    let line = text.lines().next()?.trim();
+    if line.is_empty() { None } else { Some(line.to_string()) }
 }
 
 /// Build properties of the system the About page describes.

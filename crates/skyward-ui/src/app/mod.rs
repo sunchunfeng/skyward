@@ -609,6 +609,8 @@ pub enum Effect {
     Wlan(bool),
     ScanWlan,
     JoinWlan { ssid: Vec<u8>, name: String, security: Security, password: Secret },
+    /// Join `ssid` with the password a previous start kept for it.
+    JoinKnown { ssid: Vec<u8>, name: String, security: Security },
     LeaveWlan,
     /// Ask the update server for the newest system, telling what it
     /// answered with [`App::update_checked`].

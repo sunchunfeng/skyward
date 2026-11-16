@@ -1563,6 +1563,7 @@ fn haotian(cfg: &DeviceConfig) -> DeviceInfo {
         slot: Some(Slot::A),
         snapshot: SnapshotState::None,
         boot: Boot { unlocked: Some(true), verified: Some("orange".into()) },
+        pack_version: None,
     }
 }
 

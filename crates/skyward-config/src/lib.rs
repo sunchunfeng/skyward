@@ -21,6 +21,9 @@ pub mod ramdisk {
     /// which Skyward puts in that system's init_boot image: linked
     /// statically, since it runs before any system's libraries are there.
     pub const SYSTEM_INIT: &str = "skyward/system-init";
+    /// Two lines: this recovery image's pack version, then the Skyward
+    /// release version (v0.3.1) the binary was built from.
+    pub const PACK_VERSION: &str = "skyward/pack-version.txt";
     /// Bash is static so scripts can run after the system partitions leave.
     pub const BASH: &str = "system/bin/bash";
     pub const BASH_LINK: &str = "sbin/bash";

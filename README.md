@@ -243,14 +243,14 @@ target/release/skyward-pack recovery \
 After changing the code, `tools/pack-recovery.sh` rebuilds everything and writes a new image. The file name carries the build time (year, month, day, hour, minute, second), so earlier images are never overwritten:
 
 ```sh
-tools/pack-recovery.sh \
-  --stock /path/to/recovery.img \
-  --label OS4.0.4
+tools/pack-recovery.sh --label OS4.0.4
 ```
+
+If the local backup below is present, `--stock` can be omitted.
 
 Options:
 
-- `--stock`: the stock recovery partition image. Required. The kernel and system libraries come from it, so code changes do not affect the kernel.
+- `--stock`: the stock recovery partition image. When omitted, uses `~/install_software/Android/stock-recovery/dada-OS4.0.4/recovery.img` (override with `SKYWARD_STOCK_RECOVERY`). The kernel and system libraries come from it, so code changes do not affect the kernel.
 - `--label`: a version label written into the file name. Optional.
 - `--config`: the device configuration, `devices/dada.toml` by default.
 - `--out-dir`: the output folder, `target/images` by default.
@@ -263,6 +263,8 @@ What the script needs:
 - `cargo-ndk`, installed with `cargo install cargo-ndk`.
 - The static Bash at `tools/bash/out/bash`, built by `tools/bash/build.sh`, which needs `aarch64-linux-gnu-gcc`. It does not depend on the Rust code, so it only has to be built once.
 - When the device configuration starts the OMAPI bridge, also `tools/omapi-bridge/out/omapi-bridge`. The compiler path in `tools/omapi-bridge/build.sh` is for Linux; on macOS change it to `darwin-x86_64`.
+
+Keep stock recovery at `~/install_software/Android/stock-recovery/<version>/recovery.img`; after a major OS upgrade, extract a fresh `recovery.img` from the new full OTA zip.
 
 Tests and lints run on the computer; what runs only on the phone is linted for it:
 

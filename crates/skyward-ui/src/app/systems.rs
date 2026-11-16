@@ -355,7 +355,10 @@ mod tests {
         app.set_systems(Ok(Overview { other_starts: true, ..two_systems() }));
         let page = app.frame(&f, &i);
         assert!(page.hits.iter().any(|h| h.action == Action::PickSystem(Who::Installed)), "the main system is there to switch back to");
-        assert!(!page.hits.iter().any(|h| h.action == Action::Confirm(Confirm::SwitchSystem)), "nothing is switched until one is picked");
+        assert!(
+            page.hits.iter().any(|h| h.action == Action::Confirm(Confirm::SwitchSystem)),
+            "the main system is already chosen so switching back is one slide away"
+        );
         app.key(Key::Back, 0);
         assert_eq!(app.screen(), Screen::Home);
         let opens = app.frame(&f, &i).hits.iter().filter(|h| h.action == Action::Open(Screen::Systems)).count();
