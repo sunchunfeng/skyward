@@ -182,6 +182,32 @@ target/release/skyward-pack recovery \
   --out target/skyward-nezha.img
 ```
 
+### 一键打包
+
+改动代码后，用 `tools/pack-recovery.sh` 重新编译并打出镜像。镜像文件名带上生成时间（年月日时分秒），每次打包都不会覆盖之前的文件：
+
+```sh
+tools/pack-recovery.sh \
+  --stock /path/to/recovery.img \
+  --label OS4.0.4
+```
+
+参数说明：
+
+- `--stock`：原厂 recovery 分区镜像，必填。内核和系统库取自它，代码改动不影响内核。
+- `--label`：版本标签，写进文件名，可选。
+- `--config`：设备配置，默认 `devices/dada.toml`。
+- `--out-dir`：输出目录，默认 `target/images`。
+
+产物路径为 `target/images/skyward-<代号>-<标签>-<年月日时分秒>.img`，例如 `skyward-dada-OS4.0.4-20261116150600.img`。
+
+脚本需要的环境：
+
+- Android NDK r29，通过 `ANDROID_NDK_HOME` 指定。r30 的静态 libc 与当前 Rust 冲突，链接 `skyward-system-init` 会失败。
+- `cargo-ndk`，用 `cargo install cargo-ndk` 安装。
+- 静态 Bash：`tools/bash/out/bash`，由 `tools/bash/build.sh` 生成，需要 `aarch64-linux-gnu-gcc`。它不随 Rust 代码变化，只需生成一次。
+- 设备配置中启用了 OMAPI bridge 时，还需要 `tools/omapi-bridge/out/omapi-bridge`。`tools/omapi-bridge/build.sh` 中的编译器路径是 Linux 的，在 macOS 上要改成 `darwin-x86_64`。
+
 测试和代码检查在电脑上运行；只在手机上运行的代码按照手机目标检查：
 
 ```sh

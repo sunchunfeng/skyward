@@ -159,6 +159,8 @@ mod tests {
             user: user.map(str::to_string),
             groups: words(groups),
             capabilities: Vec::new(),
+            sockets: Vec::new(),
+            description: None,
         })))
     }
 

@@ -75,6 +75,15 @@ pub fn offering(names: &[String]) -> Result<String> {
     Ok(out)
 }
 
+/// The names among `wanted` that none of the descriptions in `told` already
+/// tells of. A service told of twice has the directory take none of what it
+/// reads, and a description that tells of it again, with no version of its
+/// own, conflicts with the one that does.
+pub fn untold(wanted: &[String], told: &[Described]) -> Vec<String> {
+    let told: Vec<String> = told.iter().map(Described::name).collect();
+    wanted.iter().filter(|name| !told.contains(name)).cloned().collect()
+}
+
 /// The services the description `text` tells of. A service is given either
 /// as its interface with its instances, under the versions the description
 /// lists, or as a name of its own that holds them all; one given both ways
@@ -214,6 +223,33 @@ mod tests {
         for name in ["android.hardware.gatekeeper@1.0::IGatekeeper/default", "IWeaver/default", "android.hardware.weaver.IWeaver", "a.<b>.IA/default", "a.IA/"] {
             assert!(offering(&[name.to_string()]).is_err(), "{name} names no service of the newer kind");
         }
+    }
+
+    #[test]
+    fn a_service_another_description_tells_of_is_not_told_again_whatever_version_it_gives() {
+        let copied = r#"<manifest version="1.0" type="framework">
+            <hal format="aidl">
+                <name>android.hardware.security.keymint</name>
+                <version>3</version>
+                <fqname>IKeyMintDevice/default</fqname>
+            </hal>
+            <hal format="aidl">
+                <name>vendor.xiaomi.hardware.mitrustedui</name>
+                <version>2</version>
+                <fqname>IMiTrustedUIListener/default</fqname>
+                <fqname>IMiTrustedUIService/default</fqname>
+            </hal>
+        </manifest>"#;
+        let told = read(copied).unwrap();
+        let wanted: Vec<String> = [
+            "android.hardware.security.keymint.IKeyMintDevice/default",
+            "android.hardware.security.keymint.ISharedSecret/default",
+            "vendor.xiaomi.hardware.mitrustedui.IMiTrustedUIService/default",
+        ]
+        .map(str::to_string)
+        .to_vec();
+        assert_eq!(untold(&wanted, &told), ["android.hardware.security.keymint.ISharedSecret/default"]);
+        assert_eq!(untold(&wanted, &[]), wanted, "nothing told yet leaves all of them to tell");
     }
 
     #[test]

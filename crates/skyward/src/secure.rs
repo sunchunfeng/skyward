@@ -264,22 +264,6 @@ pub fn publish_descriptions(wanted: &[String], files: &[String]) -> Result<usize
     fs::set_permissions(into, std::os::unix::fs::PermissionsExt::from_mode(0o755))
         .with_context(|| format!("open {} to every user", into.display()))?;
     let to = into.join(PHONE_DESCRIPTION);
-    // A service told of twice has the directory take none of what it
-    // reads, so what the descriptions the recovery ships with tell of
-    // already, as they do of the boot control on some phones, is left out.
-    let mut shipped = vec![PathBuf::from(RECOVERY_MANIFEST)];
-    for entry in fs::read_dir(into).with_context(|| format!("read {}", into.display()))? {
-        shipped.push(entry.with_context(|| format!("read {}", into.display()))?.path());
-    }
-    let mut told = Vec::new();
-    for path in shipped.iter().filter(|p| **p != to && p.extension().is_some_and(|e| e == "xml") && p.is_file()) {
-        let text = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-        let services = skyward_programs::description::read(&text).with_context(|| format!("read {}", path.display()))?;
-        told.extend(services.iter().map(skyward_programs::description::Described::name));
-    }
-    let untold: Vec<String> = wanted.iter().filter(|name| !told.contains(name)).cloned().collect();
-    fs::write(&to, skyward_programs::description::offering(&untold)?).with_context(|| format!("write {}", to.display()))?;
-    fs::set_permissions(&to, std::os::unix::fs::PermissionsExt::from_mode(0o644)).with_context(|| format!("let every user read {}", to.display()))?;
     let mut copied = 0;
     let mut take = |from: &Path, text: &str| -> Result<()> {
         let name = from.file_name().with_context(|| format!("{} names no file", from.display()))?;
@@ -334,6 +318,25 @@ pub fn publish_descriptions(wanted: &[String], files: &[String]) -> Result<usize
             Err(e) => return Err(e).with_context(|| format!("read {file}")),
         }
     }
+    // The phone's own description is written last, once the copies are in
+    // place, so it offers only the services none of them tells of. A
+    // service told of twice has the directory take none of what it reads,
+    // and the copies give their own versions, which a description without
+    // versions would conflict with. The description the recovery ships with
+    // tell of their services as well, as they do of the boot control on
+    // some phones.
+    let mut shipped = vec![PathBuf::from(RECOVERY_MANIFEST)];
+    for entry in fs::read_dir(into).with_context(|| format!("read {}", into.display()))? {
+        shipped.push(entry.with_context(|| format!("read {}", into.display()))?.path());
+    }
+    let mut told = Vec::new();
+    for path in shipped.iter().filter(|p| **p != to && p.extension().is_some_and(|e| e == "xml") && p.is_file()) {
+        let text = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+        told.extend(skyward_programs::description::read(&text).with_context(|| format!("read {}", path.display()))?);
+    }
+    let untold = skyward_programs::description::untold(wanted, &told);
+    fs::write(&to, skyward_programs::description::offering(&untold)?).with_context(|| format!("write {}", to.display()))?;
+    fs::set_permissions(&to, std::os::unix::fs::PermissionsExt::from_mode(0o644)).with_context(|| format!("let every user read {}", to.display()))?;
     let rewritten = say_framework(into)?;
     // The directory reads the descriptions once and keeps to them, so one
     // that read them before these were written has to start again to see

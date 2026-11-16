@@ -238,6 +238,32 @@ target/release/skyward-pack recovery \
   --out target/skyward-nezha.img
 ```
 
+### One-step packing
+
+After changing the code, `tools/pack-recovery.sh` rebuilds everything and writes a new image. The file name carries the build time (year, month, day, hour, minute, second), so earlier images are never overwritten:
+
+```sh
+tools/pack-recovery.sh \
+  --stock /path/to/recovery.img \
+  --label OS4.0.4
+```
+
+Options:
+
+- `--stock`: the stock recovery partition image. Required. The kernel and system libraries come from it, so code changes do not affect the kernel.
+- `--label`: a version label written into the file name. Optional.
+- `--config`: the device configuration, `devices/dada.toml` by default.
+- `--out-dir`: the output folder, `target/images` by default.
+
+The image is written to `target/images/skyward-<codename>-<label>-<YYYYMMDDhhmmss>.img`, for example `skyward-dada-OS4.0.4-20261116150600.img`.
+
+What the script needs:
+
+- Android NDK r29, set with `ANDROID_NDK_HOME`. NDK r30's static libc conflicts with the current Rust toolchain, and linking `skyward-system-init` fails with it.
+- `cargo-ndk`, installed with `cargo install cargo-ndk`.
+- The static Bash at `tools/bash/out/bash`, built by `tools/bash/build.sh`, which needs `aarch64-linux-gnu-gcc`. It does not depend on the Rust code, so it only has to be built once.
+- When the device configuration starts the OMAPI bridge, also `tools/omapi-bridge/out/omapi-bridge`. The compiler path in `tools/omapi-bridge/build.sh` is for Linux; on macOS change it to `darwin-x86_64`.
+
 Tests and lints run on the computer; what runs only on the phone is linted for it:
 
 ```sh
