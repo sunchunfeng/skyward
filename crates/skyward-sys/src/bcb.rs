@@ -257,8 +257,8 @@ pub enum Work {
     /// beside it, as that system asks.
     SwitchSystem { to: String },
     /// Say why the second system's start stopped, as Skyward's program that
-    /// starts it tells: the phone stays in the recovery, and the same
-    /// system starts next.
+    /// starts it tells. The recovery puts the installed system's boot set
+    /// back, so that system starts next.
     SystemStopped,
     /// Start the system at once.
     Exit,

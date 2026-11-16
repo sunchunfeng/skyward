@@ -82,6 +82,9 @@ impl App {
     pub fn system_stopped(&mut self, why: String) {
         self.state.system_notice = Some(why);
         self.open(Screen::Systems);
+        // The second system is what failed. The main one is picked so the
+        // page can put its boot set back without another tap.
+        self.state.system_pick = Some(Who::Installed);
     }
 
     /// A switch to `to` a system asked for before the recovery started is
@@ -202,6 +205,16 @@ mod tests {
             pages::render(Screen::Home, &cx).canvas.data.clone()
         };
         assert!(named(two_systems()) != named(Overview { other_starts: true, ..two_systems() }), "the home page names the one that starts");
+    }
+
+    #[test]
+    fn a_second_system_that_did_not_start_offers_the_main_one_at_once() {
+        let (f, i) = (fonts(), info());
+        let mut app = systems_page(&f, &i, Overview { other_starts: true, ..two_systems() });
+        app.system_stopped("the root holds no program /sbin/init to start".into());
+        assert_eq!(app.state.system_pick, Some(Who::Installed));
+        assert_eq!(app.screen(), Screen::Systems);
+        assert_eq!(swipe(&mut app, &f, &i, Confirm::SwitchSystem), vec![Effect::SwitchSystem(Who::Installed)]);
     }
 
     #[test]

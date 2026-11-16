@@ -45,6 +45,30 @@ pub fn split_options(options: &[String]) -> (u64, String) {
     (flags, own.join(","))
 }
 
+/// Whether `word` is a mount flag the kernel takes, rather than one the
+/// filesystem reads.
+fn kernel_flag(word: &str) -> bool {
+    FLAGS.iter().any(|(name, _)| *name == word)
+}
+
+/// Sets of mount options to try, the phone's own first. A recovery kernel
+/// is often older than the system whose table it reads, and refuses a word
+/// that system's kernel accepts. Later tries keep `inlinecrypt`, which the
+/// data partition needs once it is encrypted, then only the kernel's flags.
+pub fn mount_attempts(options: &[String]) -> Vec<Vec<String>> {
+    let mut tries = vec![options.to_vec()];
+    let with_crypt: Vec<String> = options.iter().filter(|w| kernel_flag(w) || w.as_str() == "inlinecrypt").cloned().collect();
+    if with_crypt != *tries.last().expect("the phone's own options are the first try") {
+        tries.push(with_crypt);
+    }
+    let flags: Vec<String> = options.iter().filter(|w| kernel_flag(w)).cloned().collect();
+    let flags = if flags.is_empty() { vec!["noatime".to_string()] } else { flags };
+    if flags != *tries.last().expect("a try was pushed") {
+        tries.push(flags);
+    }
+    tries
+}
+
 /// The mount that shows at a mount point.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Visible {
@@ -142,6 +166,30 @@ mod sys {
                 .with_context(|| format!("mount {} on {} as {filesystem} with {}", device.display(), target.display(), options.join(",")));
         }
         Ok(())
+    }
+
+    /// Mount as [`mount`] does, trying a shorter option list when the kernel
+    /// refuses the phone's own. Anything other than "not these options"
+    /// stops at once.
+    pub fn mount_first(device: &Path, target: &Path, filesystem: &str, options: &[String]) -> Result<()> {
+        let mut refused = Vec::new();
+        for attempt in super::mount_attempts(options) {
+            match mount(device, target, filesystem, &attempt) {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    let invalid = e.chain().find_map(|c| c.downcast_ref::<std::io::Error>()).is_some_and(|io| io.raw_os_error() == Some(libc::EINVAL));
+                    let said = format!("{}: {e:#}", attempt.join(","));
+                    if !invalid {
+                        return match refused.is_empty() {
+                            true => Err(e),
+                            false => Err(e).context(format!("after {}", refused.join("; "))),
+                        };
+                    }
+                    refused.push(said);
+                }
+            }
+        }
+        bail!("mount {} on {} as {filesystem} ({})", device.display(), target.display(), refused.join("; "))
     }
 
     /// Show the folder `from` at `to` as well: one tree, reached from both.
@@ -445,6 +493,10 @@ mod sys {
         bail!("this host does not mount {}", device.display())
     }
 
+    pub fn mount_first(device: &Path, target: &Path, filesystem: &str, options: &[String]) -> Result<()> {
+        mount(device, target, filesystem, options)
+    }
+
     pub fn bind(from: &Path, _to: &Path) -> Result<()> {
         bail!("this host does not mount {}", from.display())
     }
@@ -495,7 +547,7 @@ mod sys {
 }
 
 pub use sys::{
-    bind, holders, holding, is_mount_point, mount, mount_ids, mount_ro, mount_ro_over, points_of, remount_writable, umount,
+    bind, holders, holding, is_mount_point, mount, mount_first, mount_ids, mount_ro, mount_ro_over, points_of, remount_writable, umount,
     umount_detach, umount_detach_over, umount_over, visible,
 };
 
@@ -514,6 +566,16 @@ mod tests {
         assert_eq!(own, "discard,reserve_root=32768,resgid=1065,fsync_mode=nobarrier,inlinecrypt,gc_merge,atgc");
         let (flags, own) = split_options(&["ro".into(), "defaults".into(), String::new()]);
         assert_eq!((flags, own.as_str()), (1, ""), "read-only, and nothing for the filesystem");
+    }
+
+    #[test]
+    fn a_newer_tables_options_are_tried_whole_then_without_the_words_an_older_kernel_refuses() {
+        let phone: Vec<String> = "noatime,discard,inlinecrypt,compress_cache,memory=normal".split(',').map(str::to_string).collect();
+        let tries = mount_attempts(&phone);
+        assert_eq!(tries[0], phone, "the phone's own options first");
+        assert_eq!(tries[1], ["noatime".to_string(), "inlinecrypt".to_string()], "encryption stays, the rest of the filesystem's words go");
+        assert_eq!(tries[2], ["noatime".to_string()], "then only what every kernel takes as a flag");
+        assert_eq!(mount_attempts(&["noatime".into()]).len(), 1, "nothing further once that is all the phone asked");
     }
 
     #[test]

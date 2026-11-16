@@ -79,7 +79,10 @@ fn open(service: &KeyMint) -> Result<Opened> {
             false => None,
         };
         std::fs::create_dir_all(MOUNT).with_context(|| format!("make {MOUNT}"))?;
-        mount::mount(&mapped, Path::new(MOUNT), &entry.filesystem, &entry.options)?;
+        // HyperOS 4's table names f2fs options the recovery kernel, built
+        // from an earlier stock image, refuses. A shorter list is tried
+        // before this is given up.
+        mount::mount_first(&mapped, Path::new(MOUNT), &entry.filesystem, &entry.options)?;
         Ok((checked, entry.filesystem.clone()))
     })();
     match mounted {

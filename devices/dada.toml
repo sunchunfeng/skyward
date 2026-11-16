@@ -202,9 +202,12 @@ probe = "http://connect.rom.miui.com/generate_204"
 [update]
 server = "https://update.miui.com/updates/miotaV3.php"
 
-# The stock build the recovery is made on: the Chinese system's
-# OS3.0.307.0, whose full update package on the phone maker's own download
-# server holds the recovery partition the recovery is built on top of.
+# The stock build the recovery kernel is taken from: the Chinese system's
+# OS3.0.307.0. A phone whose installed system is newer, such as HyperOS
+# 4.0.4, still starts this recovery; its data table may name mount options
+# this kernel refuses, and those are tried again without the extra words.
+# The full update package on the phone maker's own download server holds
+# the recovery partition the recovery is built on top of.
 [stock]
 version = "OS3.0.307.0.WOCCNXM"
 package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS3.0.307.0.WOCCNXM/dada-ota_full-OS3.0.307.0.WOCCNXM-user-16.0-135abb5f28.zip"

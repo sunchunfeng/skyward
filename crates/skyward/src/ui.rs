@@ -1399,6 +1399,9 @@ pub fn run(cfg: &DeviceConfig, programs: &[Service], font: &Path, mono: &Path, r
     // A switch the system asked for, under way; then the phone starts the
     // system switched to.
     let mut switch_asked = false;
+    // The second system did not start. Once any switch cut off before is
+    // finished, the installed system's boot set is written back.
+    let mut restore_main = false;
     // A switch went through and the phone is restarting into the system.
     let mut switched = false;
     // fastbootd may write the boot partitions, which the installed system's
@@ -1500,12 +1503,14 @@ pub fn run(cfg: &DeviceConfig, programs: &[Service], font: &Path, mono: &Path, r
             }
         },
         // The second system's start stopped and brought the recovery up to
-        // say why; it still starts next, unless the user switches.
+        // say why. Its boot set is put back to the installed system's, so
+        // that one starts next instead of failing the same way again.
         Work::SystemStopped => {
             let why = request.reason.clone().unwrap_or_default();
             skyward_sys::kmsg(&format!("the second system's start stopped: {why}"))?;
             if app.state.dual_boot {
                 app.system_stopped(why);
+                restore_main = true;
             }
         }
         Work::Menu | Work::Exit | Work::Fastboot | Work::PromptWipeData | Work::Unsupported(_) => {}
@@ -1514,6 +1519,12 @@ pub fn run(cfg: &DeviceConfig, programs: &[Service], font: &Path, mono: &Path, r
     // /metadata to fastbootd until the recovery's pages come up.
     if let (Some(worker), false, false) = (systems_worker.as_mut(), switch_asked, fastboot) {
         worker.send(systems::Task::Resume);
+    }
+    if restore_main && !fastboot {
+        if let Some(worker) = systems_worker.as_mut() {
+            app.switch_asked(Who::Installed);
+            worker.send(systems::Task::Switch(Who::Installed));
+        }
     }
     // The port came up with adb alone; at rest it offers file transfer
     // beside it.
@@ -2177,11 +2188,15 @@ pub fn run(cfg: &DeviceConfig, programs: &[Service], font: &Path, mono: &Path, r
                     }
                     systems::Event::Switched(to) => {
                         skyward_sys::kmsg(&format!("the {to:?} system starts next"))?;
-                        // A switch the system asked for is done with.
-                        if switch_asked && kept {
+                        // A switch the system asked for, or the one that puts
+                        // the main system back after the second did not
+                        // start, is done with. misc must not still ask for
+                        // the recovery, or the bootloader would come back here.
+                        if restore_main || (switch_asked && kept) {
                             bcb::clear(&misc)?;
                             kept = false;
                         }
+                        restore_main = false;
                         switch_asked = false;
                         switched = true;
                         power(Target::System)?;
