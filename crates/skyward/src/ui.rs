@@ -2146,7 +2146,16 @@ pub fn run(cfg: &DeviceConfig, programs: &[Service], font: &Path, mono: &Path, r
                     backup::Event::Plan(plan) => app.backup_plan(plan),
                     backup::Event::At { item, done, of, checking } => app.backup_at(BackupAt { item, done, of, checking }),
                     backup::Event::Ended(end) => {
-                        app.backup_ended(backup_end(end), now);
+                        let ui_end = backup_end(end);
+                        if matches!(ui_end, BackupEnd::Saved(_)) {
+                            if let Some(pending) = app.state.pending_system_install.take() {
+                                installer.as_ref().context("no installer holds a system")?.install_system(pending.size);
+                                app.begin_system_install_after_backup(pending.name, pending.size);
+                            }
+                        } else if app.state.pending_system_install.is_some() {
+                            app.clear_pending_system_install();
+                        }
+                        app.backup_ended(ui_end, now);
                         backed = true;
                     }
                 }

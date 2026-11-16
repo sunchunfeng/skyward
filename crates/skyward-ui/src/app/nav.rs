@@ -239,6 +239,18 @@ impl App {
                     self.say(l.pick(["正在清除，请等待清除完成", "正在清除，請等待清除完成", "Wiping. Wait for it to finish"]), now);
                     return fx;
                 }
+                Install::SystemBackupSetup(ref choice) => {
+                    self.state.install = Install::SystemBackupOffer(SystemBackupOffer { choice: choice.clone(), backup: true });
+                    self.state.confirm = 0.0;
+                    self.refresh();
+                    return fx;
+                }
+                Install::SystemBackupOffer(ref offer) => {
+                    self.state.install = Install::SystemChoosing(offer.choice.clone());
+                    self.state.confirm = 0.0;
+                    self.refresh();
+                    return fx;
+                }
                 Install::Starting
                 | Install::Locked(_)
                 | Install::Waiting

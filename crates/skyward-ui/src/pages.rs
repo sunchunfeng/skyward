@@ -139,6 +139,12 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
         Confirm::SwitchSystem => (["滑动以切换并重启", "滑動以切換並重新啟動", "Slide to switch and reboot"], false),
         Confirm::RemoveSystem => (["滑动以删除", "滑動以刪除", "Slide to remove"], true),
         Confirm::InstallSystem => (INSTALL, false),
+        Confirm::InstallSystemSkip => (INSTALL, false),
+        Confirm::InstallSystemBackupNext => (["滑动以继续", "滑動以繼續", "Slide to continue"], false),
+        Confirm::InstallSystemAfterBackup => (
+            ["滑动以备份并安装", "滑動以備份並安裝", "Slide to back up, then install"],
+            false,
+        ),
     };
     (s.lang.pick(label), danger)
 }
@@ -1537,6 +1543,39 @@ pub fn installing(cx: &Ctx) -> Frame {
             let note = l.pick(["返回将取消安装，不会写入任何内容。", "返回將取消安裝，不會寫入任何內容。", "Going back cancels the install without writing anything."]);
             widgets::footnote(&mut c, t, f, track.y + track.h, note)
         }
+        Install::SystemBackupOffer(offer) => {
+            let name = &offer.choice.name;
+            let y0 = widgets::list(
+                &mut c,
+                t,
+                f,
+                top,
+                &[standing(
+                    name,
+                    PURPLE,
+                    Icon::Systems,
+                    &tr!(l, "即将安装为第二系统", "即將安裝為第二系統", "About to install as the second system"),
+                )],
+            )
+            .bottom;
+            let y = widgets::section(&mut c, t, f, y0, l.pick(["安装前备份", "安裝前備份", "Back up first?"]));
+            let skip = Row::new(l.pick(["不需要，直接安装", "不需要，直接安裝", "No, install now"])).trail(Trail::Check(!offer.backup));
+            let with = Row::new(l.pick(["需要，先选择备份项", "需要，先選擇備份項目", "Yes, choose what to back up"])).trail(Trail::Check(offer.backup));
+            let list = widgets::list(&mut c, t, f, y, &[skip, with]);
+            out.extend(hits(&list.rows, &[Action::SystemBackupNeed(false), Action::SystemBackupNeed(true)]));
+            let note = l.pick([
+                "主系统分区不会被第二系统安装改写；备份可在失败时从 Skyward/backups 恢复。",
+                "主系統分割區不會被第二系統安裝改寫；備份可在失敗時從 Skyward/backups 還原。",
+                "The main system's partitions are not rewritten. A backup can be restored from Skyward/backups if something goes wrong.",
+            ]);
+            let y = widgets::footnote(&mut c, t, f, list.bottom, note);
+            let confirm = if offer.backup { Confirm::InstallSystemBackupNext } else { Confirm::InstallSystemSkip };
+            let (label, danger) = confirm_label(confirm, s);
+            let track = widgets::confirm(&mut c, t, f, y + t.m.dp(24.0), label, danger, s.confirm);
+            out.push(Hit { rect: track, action: Action::Confirm(confirm) });
+            widgets::footnote(&mut c, t, f, track.y + track.h, l.pick(["返回可重新选择分配空间", "返回可重新選擇分配空間", "Go back to change the room chosen."]))
+        }
+        Install::SystemBackupSetup(_) => backup_setup(cx, &mut c, &mut out, top, Confirm::InstallSystemAfterBackup),
         Install::Systeming { name, stage } => {
             let title = tr!(l, "正在安装 {name}", "正在安裝 {name}", "Installing {name}");
             let (detail, done) = system_stage(l, stage.as_ref());
@@ -1981,12 +2020,10 @@ pub fn search(cx: &Ctx) -> Frame {
 }
 
 /// Backing up: what to take, where it goes, and how.
-pub fn backup(cx: &Ctx) -> Frame {
+/// Backup part pickers and options; `confirm` is the swipe that starts it.
+fn backup_setup(cx: &Ctx, c: &mut Canvas, out: &mut Vec<Hit>, top: f32, confirm: Confirm) -> f32 {
     let (t, f, s, i, l) = (cx.t, cx.f, cx.state, cx.info, cx.state.lang);
-    let mut c = long_page(cx);
-    let mut out = Vec::new();
-    let top = t.m.content_top;
-    let y = widgets::section_first(&mut c, t, f, top, l.pick(["备份内容", "備份內容", "Contents"]));
+    let y = widgets::section_first(c, t, f, top, l.pick(["备份内容", "備份內容", "Contents"]));
     let system = fmt::snapshot_backup_note(l, &i.snapshot).unwrap_or(l.pick(["当前槽位在 super 中的分区", "目前槽位在 super 中的分割區", "The current slot's partitions in super"]));
     let data = l.pick(match s.data == Data::Open {
         true => ["应用、账户和设置，不包括内部存储、锁屏密码和指纹", "應用程式、帳戶和設定，不包括內部儲存空間、螢幕鎖定密碼和指紋", "Apps, accounts and settings, without internal storage, the screen lock or fingerprints"],
@@ -2005,9 +2042,9 @@ pub fn backup(cx: &Ctx) -> Frame {
         .enumerate()
         .map(|(k, (name, sub))| Row::new(l.pick(*name)).subtitle(sub).trail(Trail::Check(s.backup[k])))
         .collect();
-    let parts = widgets::list(&mut c, t, f, y, &rows);
+    let parts = widgets::list(c, t, f, y, &rows);
     out.extend(hits(&parts.rows, &[0, 1, 2, 3].map(Action::BackupPart)));
-    let y = widgets::section(&mut c, t, f, parts.bottom, l.pick(["存放位置", "存放位置", "Save to"]));
+    let y = widgets::section(c, t, f, parts.bottom, l.pick(["存放位置", "存放位置", "Save to"]));
     let storage = match (s.data.storage_open(), i.storage.free.map(fmt::gb)) {
         (true, Some(free)) => tr!(l, "剩余 {free}", "剩餘 {free}", "{free} free"),
         (true, None) => l.pick(["无法读取剩余空间", "無法讀取剩餘空間", "Free space unknown"]).to_string(),
@@ -2019,13 +2056,13 @@ pub fn backup(cx: &Ctx) -> Frame {
         Some(UsbDrive::Unreadable(_)) => USB_DRIVE_UNREADABLE,
         None => USB_DRIVE_WANTED,
     });
-    let places = widgets::list(&mut c, t, f, y, &[
+    let places = widgets::list(c, t, f, y, &[
         Row::new(place_name(l, Place::Storage)).subtitle(&storage).trail(Trail::Check(s.backup_to == Place::Storage)),
         Row::new(place_name(l, Place::UsbDrive)).subtitle(usb).trail(Trail::Check(s.backup_to == Place::UsbDrive)),
     ]);
     out.extend(hits(&places.rows, &[Action::BackupTo(Place::Storage), Action::BackupTo(Place::UsbDrive)]));
-    let y = widgets::section(&mut c, t, f, places.bottom, l.pick(["选项", "選項", "Options"]));
-    let options = widgets::list(&mut c, t, f, y, &[
+    let y = widgets::section(c, t, f, places.bottom, l.pick(["选项", "選項", "Options"]));
+    let options = widgets::list(c, t, f, y, &[
         Row::new(l.pick(["压缩", "壓縮", "Compress"])).subtitle(l.pick(["备份更小，耗时更长", "備份更小，耗時更長", "Smaller, and slower to make"])).switch(s.compress),
         Row::new(l.pick(["完成后校验", "完成後驗證", "Verify when done"])).subtitle(l.pick(["确认备份文件完整", "確認備份檔案完整", "Checks the backup's files are whole"])).switch(s.verify),
     ]);
@@ -2035,11 +2072,20 @@ pub fn backup(cx: &Ctx) -> Frame {
         "備份將儲存在 Skyward/backups 資料夾中，以開始備份的時間命名。",
         "Backups go in the Skyward/backups folder, named by when they began.",
     ]);
-    let y = widgets::footnote(&mut c, t, f, options.bottom, note);
-    let (label, danger) = confirm_label(Confirm::Backup, cx.state);
-    let track = widgets::confirm(&mut c, t, f, y + t.m.dp(24.0), label, danger, s.confirm);
-    out.push(Hit { rect: track, action: Action::Confirm(Confirm::Backup) });
-    Frame::new(t, fit(c, t, track.y + track.h), out, l.pick(["备份", "備份", "Backup"]), top)
+    let y = widgets::footnote(c, t, f, options.bottom, note);
+    let (label, danger) = confirm_label(confirm, cx.state);
+    let track = widgets::confirm(c, t, f, y + t.m.dp(24.0), label, danger, s.confirm);
+    out.push(Hit { rect: track, action: Action::Confirm(confirm) });
+    track.y + track.h
+}
+
+pub fn backup(cx: &Ctx) -> Frame {
+    let (t, s) = (cx.t, cx.state);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+    let bottom = backup_setup(cx, &mut c, &mut out, top, Confirm::Backup);
+    Frame::new(t, fit(c, t, bottom), out, s.lang.pick(["备份", "備份", "Backup"]), top)
 }
 
 /// The backups found, newest first, to restore one; those that cannot be

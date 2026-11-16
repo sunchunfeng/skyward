@@ -228,6 +228,12 @@ pub enum Confirm {
     RemoveSystem,
     /// Install the system the installer holds with the room chosen.
     InstallSystem,
+    /// Install the second system without backing up first.
+    InstallSystemSkip,
+    /// Go on to choose backup parts before installing the second system.
+    InstallSystemBackupNext,
+    /// Back up, then install the second system with the parts ticked.
+    InstallSystemAfterBackup,
 }
 
 /// What a control does when touched.
@@ -304,6 +310,8 @@ pub enum Action {
     /// Give the root of the system being installed the size at this place
     /// in those offered.
     SystemSize(usize),
+    /// On the pre-install offer, pick whether to back up first.
+    SystemBackupNeed(bool),
     /// A key of the on-screen keyboard.
     Type(Cap),
     /// A key of the row above the keyboard, the terminal's or the editor's.

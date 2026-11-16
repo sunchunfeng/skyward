@@ -15,6 +15,21 @@ pub struct SystemChoice {
     pub size: usize,
 }
 
+/// Whether to back up before installing the second system.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SystemBackupOffer {
+    pub choice: SystemChoice,
+    /// `true` when the user chose to back up first.
+    pub backup: bool,
+}
+
+/// A second-system install waiting on a backup, or that follows one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PendingSystemInstall {
+    pub name: String,
+    pub size: u64,
+}
+
 /// The system that starts, as the runtime last read the systems.
 pub fn starting(systems: &Overview) -> Who {
     if systems.other_starts {
@@ -321,6 +336,13 @@ mod tests {
         // wake guard.
         tap_at(&mut app, &f, &i, Action::SystemSize(1), 1000);
         let track = app.frame(&f, &i).hits.iter().find(|h| h.action == Action::Confirm(Confirm::InstallSystem)).unwrap().rect;
+        let y = track.centre().1 - app.top().1;
+        app.touch(Touch::Down(track.x + track.h / 2.0, y), &f, 1000);
+        app.touch(Touch::Move(track.x + track.w, y), &f, 1000);
+        assert!(app.touch(Touch::Up, &f, 1000).is_empty());
+        assert!(matches!(app.state.install, Install::SystemBackupOffer(_)));
+        tap(&mut app, &f, &i, Action::SystemBackupNeed(false));
+        let track = app.frame(&f, &i).hits.iter().find(|h| h.action == Action::Confirm(Confirm::InstallSystemSkip)).unwrap().rect;
         let y = track.centre().1 - app.top().1;
         app.touch(Touch::Down(track.x + track.h / 2.0, y), &f, 1000);
         app.touch(Touch::Move(track.x + track.w, y), &f, 1000);

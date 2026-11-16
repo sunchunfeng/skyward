@@ -24,6 +24,9 @@ pub mod ramdisk {
     /// Two lines: this recovery image's pack version, then the Skyward
     /// release version (v0.3.1) the binary was built from.
     pub const PACK_VERSION: &str = "skyward/pack-version.txt";
+    /// Built-in root packages and manifest.toml for the Root page.
+    pub const ROOT: &str = "skyward/root";
+    pub const ROOT_MANIFEST: &str = "skyward/root/manifest.toml";
     /// Bash is static so scripts can run after the system partitions leave.
     pub const BASH: &str = "system/bin/bash";
     pub const BASH_LINK: &str = "sbin/bash";

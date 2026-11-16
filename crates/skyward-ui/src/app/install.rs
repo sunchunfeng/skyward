@@ -89,6 +89,10 @@ pub enum Install {
     /// A system to install beside the installed one waits for the room its
     /// root takes to be chosen.
     SystemChoosing(SystemChoice),
+    /// Whether to back up before the second system goes in.
+    SystemBackupOffer(SystemBackupOffer),
+    /// Which parts to back up before that install.
+    SystemBackupSetup(SystemChoice),
     /// The system is being installed: its name, and how far.
     Systeming { name: String, stage: Option<Stage> },
     /// Its install script is made ready and then, once `running`, runs; how
@@ -161,6 +165,19 @@ impl App {
     pub fn start_rescue(&mut self) {
         self.begin_install(Install::Starting, Source::Rescue, None);
         self.open(Screen::Installing);
+    }
+
+    /// Start installing the second system after a backup, or clear a
+    /// pending install when the backup did not finish.
+    pub fn begin_system_install_after_backup(&mut self, name: String, _size: u64) {
+        self.state.pending_system_install = None;
+        self.state.install = Install::Systeming { name, stage: None };
+        self.open(Screen::Installing);
+        self.refresh();
+    }
+
+    pub fn clear_pending_system_install(&mut self) {
+        self.state.pending_system_install = None;
     }
 
     /// In rescue, the computer asked for all user data to be erased, and it

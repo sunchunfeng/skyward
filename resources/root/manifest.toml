@@ -1,0 +1,17 @@
+# Root bundles in the recovery ramdisk (skyward/root/).
+# method: after_boot = copy to internal storage after decrypt; flash = run via Install.
+
+[[item]]
+title = "KernelSU"
+file = "KernelSU_v3.3.1_32680-release.apk"
+method = "after_boot"
+
+[[item]]
+title = "APatch"
+file = "APatch_6ec140e.apk"
+method = "after_boot"
+
+[[item]]
+title = "ReSukiSU"
+file = "ReSukiSU_v4.2.0-rc3_35171-arm64-v8a-release.zip"
+method = "after_boot"

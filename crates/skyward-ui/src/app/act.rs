@@ -149,6 +149,13 @@ impl App {
                     self.refresh();
                 }
             }
+            Action::SystemBackupNeed(backup) => {
+                if let Install::SystemBackupOffer(offer) = &mut self.state.install {
+                    offer.backup = backup;
+                    self.state.confirm = 0.0;
+                    self.refresh();
+                }
+            }
             Action::PickSystem(who) => {
                 if self.state.systems_work.is_none() {
                     self.state.system_pick = Some(who);
@@ -862,9 +869,54 @@ impl App {
             }
             Confirm::InstallSystem => {
                 if let Install::SystemChoosing(choice) = &self.state.install {
-                    fx.push(Effect::InstallSystem { size: choice.sizes[choice.size] });
-                    self.state.install = Install::Systeming { name: choice.name.clone(), stage: None };
+                    self.state.install = Install::SystemBackupOffer(SystemBackupOffer { choice: choice.clone(), backup: false });
+                    self.state.confirm = 0.0;
                     self.refresh();
+                }
+            }
+            Confirm::InstallSystemSkip => {
+                if let Install::SystemBackupOffer(offer) = &self.state.install {
+                    let size = offer.choice.sizes[offer.choice.size];
+                    fx.push(Effect::InstallSystem { size });
+                    self.state.install = Install::Systeming { name: offer.choice.name.clone(), stage: None };
+                    self.refresh();
+                }
+            }
+            Confirm::InstallSystemBackupNext => {
+                if let Install::SystemBackupOffer(offer) = &self.state.install
+                    && offer.backup
+                {
+                    self.state.install = Install::SystemBackupSetup(offer.choice.clone());
+                    self.state.confirm = 0.0;
+                    self.refresh();
+                }
+            }
+            Confirm::InstallSystemAfterBackup => {
+                if let Install::SystemBackupSetup(choice) = &self.state.install {
+                    let s = &self.state;
+                    let refused = if !s.backup.contains(&true) {
+                        Some(["请选择要备份的内容", "請選擇要備份的內容", "Choose what to back up"])
+                    } else if s.backup[2] && (s.data != Data::Open || s.closed_users) {
+                        Some(["备份 data 分区需先完成「解密」", "備份 data 分割區需先完成「解密」", "Decrypt before backing up the data partition"])
+                    } else if s.place_open(s.backup_to) {
+                        None
+                    } else {
+                        Some(match (s.backup_to, &s.usb_drive) {
+                            (Place::Storage, _) if s.data == Data::Erased => DATA_ERASED,
+                            (Place::Storage, _) => DECRYPT_FIRST,
+                            (Place::UsbDrive, Some(UsbDrive::Unreadable(_))) => USB_DRIVE_UNREADABLE,
+                            (Place::UsbDrive, _) => USB_DRIVE_WANTED,
+                        })
+                    };
+                    match refused {
+                        Some(why) => self.say(l.pick(why), now),
+                        None => {
+                            let pending = PendingSystemInstall { name: choice.name.clone(), size: choice.sizes[choice.size] };
+                            let backup = Effect::Backup { parts: s.backup, place: s.backup_to, compress: s.compress, verify: s.verify };
+                            self.state.pending_system_install = Some(pending);
+                            fx.push(backup);
+                        }
+                    }
                 }
             }
         }
