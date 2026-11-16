@@ -17,3 +17,9 @@ TODO.md
 notes/
 
 tools/bash/out/
+
+# Local toolchain caches (not for commit)
+.cargo-home/
+.cargo-home2/
+.rustup-home/
+third_party/ureq-proto/

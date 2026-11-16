@@ -340,10 +340,10 @@ impl Inputs {
                             out.push(wake);
                             continue;
                         }
-                        if let EventSummary::Key(_, code, value @ (0 | 1)) = e.destructure() {
-                            if let Some(k) = key_of(code) {
-                                out.push(Event::Key(k, value == 1));
-                            }
+                        if let EventSummary::Key(_, code, value @ (0 | 1)) = e.destructure()
+                            && let Some(k) = key_of(code)
+                        {
+                            out.push(Event::Key(k, value == 1));
                         }
                     }
                 }

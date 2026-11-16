@@ -214,10 +214,11 @@ impl Modprobe {
     }
 
     fn block(&mut self, args: &[String]) {
-        if args[0] == "blocklist" && args.len() == 2 {
-            if let Some(module) = canonical(&args[1]) {
-                self.blocklist.insert(module);
-            }
+        if args[0] == "blocklist"
+            && args.len() == 2
+            && let Some(module) = canonical(&args[1])
+        {
+            self.blocklist.insert(module);
         }
     }
 
@@ -330,7 +331,7 @@ impl Modprobe {
         let module = canonical(path).unwrap_or_default();
         let options = self.options.get(&module).cloned().unwrap_or_default();
         let file = OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW).open(path).with_context(|| format!("open {path}"))?;
-        match crate::finit_module(&file, std::path::Path::new(path), &options) {
+        match crate::finit_module(&file, Path::new(path), &options) {
             Ok(()) => self.count += 1,
             Err(e) if e.raw_os_error() == Some(libc::EEXIST) => {}
             Err(e) => return Err(e).with_context(|| format!("load {path} with {options:?}")),
@@ -347,10 +348,10 @@ impl Modprobe {
     pub fn load_listed(&mut self) -> Vec<(String, anyhow::Error)> {
         let mut failed = Vec::new();
         for name in self.listed.clone() {
-            if let Err(e) = self.load(&name) {
-                if !self.is_blocklisted(&name) {
-                    failed.push((name, e));
-                }
+            if let Err(e) = self.load(&name)
+                && !self.is_blocklisted(&name)
+            {
+                failed.push((name, e));
             }
         }
         failed
